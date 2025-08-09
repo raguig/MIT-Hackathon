@@ -53,6 +53,7 @@ export const QAChat = () => {
   const [url, setUrl] = useState("");
   const [docs, setDocs] = useState<DocData[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [currentTicker, setCurrentTicker] = useState<string>("");
   const { toast } = useToast();
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -180,7 +181,10 @@ export const QAChat = () => {
       const response = await fetch(`${API_URL}/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: q }),
+        body: JSON.stringify({
+          question: q,
+          ticker: currentTicker, // Include current ticker if available
+        }),
       });
 
       const data = await response.json();
@@ -251,6 +255,26 @@ export const QAChat = () => {
           {suggestion}
         </Button>
       ))}
+    </div>
+  );
+
+  // Add ticker input
+  const renderTickerInput = () => (
+    <div className="flex gap-2 mb-4">
+      <Input
+        placeholder="Enter ticker (e.g., AAPL)"
+        value={currentTicker}
+        onChange={(e) => setCurrentTicker(e.target.value.toUpperCase())}
+        className="w-32"
+      />
+      <Button
+        variant="outline"
+        onClick={() =>
+          currentTicker && answer(`Tell me about ${currentTicker}`)
+        }
+      >
+        Analyze
+      </Button>
     </div>
   );
 
