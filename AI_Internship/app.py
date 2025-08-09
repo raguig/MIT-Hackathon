@@ -10,6 +10,9 @@ from langchain.memory import ConversationBufferMemory
 from langchain.docstore.document import Document
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import yfinance as yf
+import pandas as pd
+from ISC import compute_enhanced_sentiment
 
 app = Flask(__name__)
 CORS(app)
@@ -172,6 +175,112 @@ def ask_question():
     
     except Exception as e:
         print(f"Error in ask_question: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/price-series', methods=['POST'])
+def price_series():
+    try:
+        data = request.get_json()
+        symbol = data.get('symbol', 'IBM')
+        days = int(data.get('days', 120))
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period=f"{days}d")
+        if hist.empty:
+            return jsonify({"status": "error", "message": "No data found"}), 404
+        hist = hist.reset_index()
+        hist['date'] = pd.to_datetime(hist['Date']).dt.strftime('%Y-%m-%d')
+        hist['ma20'] = hist['Close'].rolling(window=20).mean()
+        last_close = hist['Close'].iloc[-1]
+        last_ma20 = hist['ma20'].iloc[-1]
+        if pd.isna(last_ma20):
+            recommendation = "HOLD"
+        elif last_close > last_ma20:
+            recommendation = "BUY"
+        elif last_close < last_ma20:
+            recommendation = "SELL"
+        else:
+            recommendation = "HOLD"
+        # --- Use real sentiment ---
+        hist = fetch_and_merge_sentiment(symbol, hist)
+        # Prepare data for frontend
+        chart_data = [
+            {
+                "date": row['date'],
+                "close": row['Close'],
+                "ma20": row['ma20'] if not pd.isna(row['ma20']) else None,
+                "sentiment": row['sentiment']
+            }
+            for _, row in hist.iterrows()
+        ]
+        return jsonify({
+            "status": "success",
+            "series": chart_data,
+            "lastClose": float(last_close),
+            "recommendation": recommendation
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+def fetch_and_merge_sentiment(symbol, hist):
+    # Simulate news for each date (replace with real news if available)
+    sentiment_rows = []
+    for i, date in enumerate(hist['Date']):
+        if i % 2 == 0:
+            text = "profit growth strong beat record"
+        else:
+            text = "loss decline risk drop weak"
+        sentiment_rows.append({
+            "date": date,
+            "ticker": symbol,
+            "text": text
+        })
+    sentiment_df = pd.DataFrame(sentiment_rows)
+    daily_sent = compute_enhanced_sentiment(sentiment_df)
+    # Merge with price data
+    hist = hist.copy()
+    hist['date_only'] = pd.to_datetime(hist['Date']).dt.date
+    daily_sent['date_only'] = pd.to_datetime(daily_sent['date']).dt.date
+    hist = pd.merge(hist, daily_sent[['date_only', 'sentiment']], on='date_only', how='left')
+    hist['sentiment'] = hist['sentiment'].fillna(0.0)
+    return hist
+
+@app.route('/api/sentiment', methods=['POST'])
+def get_sentiment():
+    try:
+        data = request.get_json()
+        symbol = data.get('symbol', 'IBM')
+        days = int(data.get('days', 7))
+        # Fetch recent price data for dates
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period=f"{days}d")
+        if hist.empty:
+            return jsonify({"status": "error", "message": "No data found"}), 404
+        hist = hist.reset_index()
+        # Simulate news for each date (replace with real news if available)
+        sentiment_rows = []
+        for i, date in enumerate(hist['Date']):
+            if i % 2 == 0:
+                text = "profit growth strong beat record"
+            else:
+                text = "loss decline risk drop weak"
+            sentiment_rows.append({
+                "date": date,
+                "ticker": symbol,
+                "text": text
+            })
+        sentiment_df = pd.DataFrame(sentiment_rows)
+        daily_sent = compute_enhanced_sentiment(sentiment_df)
+        # Aggregate sentiment
+        avg_sentiment = daily_sent['sentiment'].mean()
+        latest_sentiment = daily_sent['sentiment'].iloc[-1]
+        return jsonify({
+            "status": "success",
+            "symbol": symbol,
+            "average_sentiment": avg_sentiment,
+            "latest_sentiment": latest_sentiment,
+            "details": daily_sent.to_dict(orient="records")
+        })
+    except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == '__main__':

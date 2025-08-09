@@ -1,45 +1,51 @@
+import requests
+
+def fetch_alpha_vantage(symbol, api_key):
+    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}&apikey={api_key}"
+    response = requests.get(url)
+    data = response.json()
+    return data["Time Series (Daily)"]
+
+import matplotlib.pyplot as plt
 import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
 
-# Generate sample stock data
-def generate_stock_data(days=252):  # 1 year of trading days
-    np.random.seed(42)  # For reproducibility
-    
-    # Start date (1 year ago)
-    start_date = datetime.now() - timedelta(days=days)
-    dates = [start_date + timedelta(days=x) for x in range(days)]
-    
-    # Initial price
-    price = 100
-    prices = [price]
-    
-    # Generate prices with random walk
-    for _ in range(days-1):
-        change_percent = np.random.normal(0.0001, 0.02)  # Mean slightly positive
-        price = price * (1 + change_percent)
-        prices.append(price)
-    
-    # Generate other columns
-    df = pd.DataFrame({
-        'Date': dates,
-        'Close': prices,
-        'Open': [p * (1 + np.random.normal(0, 0.005)) for p in prices],
-        'High': [p * (1 + abs(np.random.normal(0, 0.01))) for p in prices],
-        'Low': [p * (1 - abs(np.random.normal(0, 0.01))) for p in prices],
-        'Volume': [int(np.random.normal(1000000, 200000)) for _ in range(days)]
-    })
-    
-    # Clean up dates and sort
-    df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
-    df = df.sort_values('Date')
-    
-    return df
+def plot_prices(data):
+    df = pd.DataFrame.from_dict(data, orient='index')
+    df = df.astype(float)
+    df['MA20'] = df['4. close'].rolling(window=20).mean()
+    df[['4. close', 'MA20']].plot(title="Price + MA20")
+    plt.show()
 
-# Generate and save the data
-df = generate_stock_data()
-csv_path = 'sample_stock_data.csv'
-df.to_csv(csv_path, index=False)
-print(f"Generated sample stock data and saved to {csv_path}")
-print(f"First few rows:")
-print(df.head())
+from prophet import Prophet
+
+def forecast_prices(data):
+    df = pd.DataFrame([
+        {"ds": date, "y": float(values["4. close"])}
+        for date, values in data.items()
+    ])
+    df = df.sort_values("ds")
+    model = Prophet()
+    model.fit(df)
+    future = model.make_future_dataframe(periods=30)
+    forecast = model.predict(future)
+    model.plot(forecast)
+    plt.show()
+
+def generate_recommendation(data):
+    closes = [float(v["4. close"]) for v in list(data.values())[:5]]
+    if closes[0] > closes[-1]:
+        return "Buy"
+    elif closes[0] < closes[-1]:
+        return "Sell"
+    else:
+        return "Hold"
+
+symbol = "MSFT"
+api_key = "93899VRXQ8L3EM1Q"
+data = fetch_alpha_vantage(symbol, api_key)
+plot_prices(data)
+forecast_prices(data)
+generate_recommendation(data)
+
+rec = generate_recommendation(data)
+print("Recommendation:", rec)

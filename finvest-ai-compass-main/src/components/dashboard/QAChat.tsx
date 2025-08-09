@@ -54,6 +54,12 @@ export const QAChat = () => {
   const [docs, setDocs] = useState<DocData[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentTicker, setCurrentTicker] = useState<string>("");
+  const [sentiment, setSentiment] = useState<null | {
+    symbol: string;
+    average_sentiment: number;
+    latest_sentiment: number;
+    details: any[];
+  }>(null);
   const { toast } = useToast();
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -235,6 +241,20 @@ export const QAChat = () => {
     answer(q);
   };
 
+  const fetchSentiment = async (symbol: string) => {
+    const res = await fetch("http://localhost:5000/api/sentiment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol }),
+    });
+    const data = await res.json();
+    if (data.status === "success") {
+      setSentiment(data);
+    } else {
+      setSentiment(null);
+    }
+  };
+
   const renderSuggestions = () => (
     <div className="flex flex-wrap gap-2 mb-4">
       {[
@@ -365,6 +385,61 @@ export const QAChat = () => {
         <Button onClick={onSend} variant="hero" disabled={isProcessing}>
           {isProcessing ? <div className="animate-spin">↻</div> : <Send />}
         </Button>
+      </div>
+
+      {/* Sentiment Analysis Demo */}
+      <div className="mt-4">
+        <h3 className="text-lg font-semibold mb-2">Sentiment Analysis Demo</h3>
+        <div className="mb-2">
+          <input
+            type="text"
+            placeholder="Enter symbol (e.g. MSFT)"
+            onChange={(e) => setCurrentTicker(e.target.value.toUpperCase())}
+            value={currentTicker}
+            className="border px-2 py-1 rounded mr-2"
+          />
+          <button
+            onClick={() => fetchSentiment(currentTicker)}
+            className="bg-blue-500 text-white px-3 py-1 rounded"
+          >
+            Get Sentiment
+          </button>
+        </div>
+        {sentiment && (
+          <div className="mb-2">
+            <div>
+              <b>Sentiment for {sentiment.symbol}:</b>
+            </div>
+            <div>
+              Average:{" "}
+              <span
+                className={
+                  sentiment.average_sentiment > 0
+                    ? "text-green-600"
+                    : sentiment.average_sentiment < 0
+                    ? "text-red-600"
+                    : "text-yellow-600"
+                }
+              >
+                {sentiment.average_sentiment.toFixed(2)}
+              </span>
+            </div>
+            <div>
+              Latest:{" "}
+              <span
+                className={
+                  sentiment.latest_sentiment > 0
+                    ? "text-green-600"
+                    : sentiment.latest_sentiment < 0
+                    ? "text-red-600"
+                    : "text-yellow-600"
+                }
+              >
+                {sentiment.latest_sentiment.toFixed(2)}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </Card>
   );
