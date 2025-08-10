@@ -20,8 +20,8 @@ A full-stack AI-powered financial dashboard and chatbot for market analysis, doc
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/raguig/MIT-Hackathon/tree/main
-cd AI_Internship
+git clone https://github.com/raguig/MIT-Hackathon.git
+cd Backend
 ```
 
 ---
